@@ -239,7 +239,7 @@ export async function createWorkspace(repoUrl) {
   const root = path.join(WORK_ROOT,id);
   await fs.mkdir(root,{recursive:true});
   if (!repoUrl) return {id,root};
-  if (!/^https:\\/\\/github\\.com\\/[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+(?:\\.git)?\\/?$/.test(repoUrl)) throw new Error("Only public GitHub repository URLs are accepted for hosted workspaces.");
+  if (!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?\/?$/.test(repoUrl)) throw new Error("Only public GitHub repository URLs are accepted for hosted workspaces.");
   await execFileAsync("git",["clone","--depth","1",repoUrl,root],{timeout:45000,maxBuffer:10000});
   return {id,root};
 }

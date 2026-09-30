@@ -4,6 +4,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { pipeline, env } from "@huggingface/transformers";
 
 const execFileAsync = promisify(execFile);
 const MAX_OUTPUT = 7000;
@@ -11,7 +12,17 @@ const MAX_STEPS = 8;
 const WORK_ROOT = "/tmp/dev-workspaces";
 const LOCAL_MODEL_ID = "onnx-community/SmolLM2-135M-Instruct-ONNX-MHA";
 const LOCAL_MODEL_DTYPE = "q4f16";
+const LOCAL_DEVICE = "cpu";
+const LOCAL_MAX_NEW_TOKENS = 192;
+const LOCAL_MAX_STEPS = 4;
 const LOCAL_CACHE_DIR = "/tmp/dev-model-cache";
+
+env.cacheDir = LOCAL_CACHE_DIR;
+env.useFSCache = true;
+env.useBrowserCache = false;
+env.allowRemoteModels = true;
+env.allowLocalModels = false;
+env.logLevel = 40;
 
 function clip(s, n = MAX_OUTPUT) {
   s = String(s ?? "");
@@ -117,20 +128,30 @@ const SYSTEM = "You are Dev, DEMO MCP's coding-focused agent. You are concise, p
 const LOCAL_SYSTEM = "You are Dev, a lightweight self-hosted coding assistant. You run locally inside the Dev server with no external API key.\\n\\nYou are coding-first but can answer general reasoning questions. When a repository is provided, inspect files before proposing edits. You have a small set of safe tools.\\n\\nIMPORTANT: respond with exactly one JSON object and no markdown. Choose one action:\\n{\\\"action\\\":\\\"list_dir\\\",\\\"path\\\":\\\".\\\"}\\n{\\\"action\\\":\\\"read_file\\\",\\\"path\\\":\\\"src/example.js\\\",\\\"start\\\":1,\\\"lines\\\":120}\\n{\\\"action\\\":\\\"search_text\\\",\\\"query\\\":\\\"needle\\\"}\\n{\\\"action\\\":\\\"write_file\\\",\\\"path\\\":\\\"src/example.js\\\",\\\"content\\\":\\\"complete file contents\\\"}\\n{\\\"action\\\":\\\"git_status\\\"}\\n{\\\"action\\\":\\\"git_diff\\\"}\\n{\\\"action\\\":\\\"run_check\\\",\\\"command\\\":\\\"npm test\\\"}\\n{\\\"action\\\":\\\"final\\\",\\\"answer\\\":\\\"your answer\\\"}\\n\\nUse write_file only when you have enough evidence about the target file. Never invent repository contents. After edits, prefer a verification action. Keep answers focused.";
 
 let localGeneratorPromise = null;
+let localGenerationQueue = Promise.resolve();
 
 async function getLocalGenerator() {
   if (!localGeneratorPromise) {
-    localGeneratorPromise = (async () => {
-      const { pipeline, env } = await import("@huggingface/transformers");
-      env.cacheDir = LOCAL_CACHE_DIR;
-      env.allowRemoteModels = true;
-      return pipeline("text-generation", LOCAL_MODEL_ID, {dtype: LOCAL_MODEL_DTYPE});
-    })().catch(err => {
+    localGeneratorPromise = pipeline("text-generation", LOCAL_MODEL_ID, {
+      dtype: LOCAL_MODEL_DTYPE,
+      device: LOCAL_DEVICE
+    }).catch(err => {
       localGeneratorPromise = null;
       throw err;
     });
   }
   return localGeneratorPromise;
+}
+
+async function generateLocal(generator, messages) {
+  const task = async () => generator(messages, {
+    max_new_tokens: LOCAL_MAX_NEW_TOKENS,
+    do_sample: false,
+    return_full_text: false
+  });
+  const run = localGenerationQueue.then(task, task);
+  localGenerationQueue = run.catch(() => {});
+  return run;
 }
 
 function extractGeneratedText(output) {
@@ -193,8 +214,8 @@ async function runLocalAgent(message, workspace) {
   const messages = [{role:"system",content:LOCAL_SYSTEM},{role:"user",content:message}];
   const trace = [];
 
-  for (let step = 0; step < 6; step++) {
-    const output = await generator(messages, {max_new_tokens:384,do_sample:false,temperature:0});
+  for (let step = 0; step < LOCAL_MAX_STEPS; step++) {
+    const output = await generateLocal(generator, messages);
     const raw = extractGeneratedText(output);
     const action = extractJsonObject(raw);
 

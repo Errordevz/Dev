@@ -144,33 +144,14 @@ function extractGeneratedText(output) {
 
 function extractJsonObject(text) {
   const trimmed = String(text || "").trim();
-  const fenced = trimmed.match(new RegExp("[\\\\u0060]{3}(?:json)?\\\\s*([\\\\s\\\\S]*?)[\\\\u0060]{3}","i"));
+  const fence = String.fromCharCode(96).repeat(3);
+  const fenced = trimmed.match(new RegExp(fence + "(?:json)?\\s*([\\s\\S]*?)" + fence, "i"));
   const source = fenced ? fenced[1].trim() : trimmed;
   try { return JSON.parse(source); } catch {}
-  let start = source.indexOf("{");
-  while (start >= 0) {
-    let depth = 0;
-    let inString = false;
-    let escaped = false;
-    for (let i = start; i < source.length; i++) {
-      const ch = source[i];
-      if (inString) {
-        if (escaped) escaped = false;
-        else if (ch === "\\\\") escaped = true;
-        else if (ch === "\\"") inString = false;
-        continue;
-      }
-      if (ch === "\\"") { inString = true; continue; }
-      if (ch === "{") depth++;
-      if (ch === "}") {
-        depth--;
-        if (depth === 0) {
-          try { return JSON.parse(source.slice(start, i + 1)); } catch {}
-          break;
-        }
-      }
-    }
-    start = source.indexOf("{", start + 1);
+  const first = source.indexOf("{");
+  const last = source.lastIndexOf("}");
+  if (first >= 0 && last > first) {
+    try { return JSON.parse(source.slice(first, last + 1)); } catch {}
   }
   return null;
 }

@@ -6,9 +6,9 @@ Dev is an open-source, coding-focused assistant for the DEMO lineup. It works st
 
 Dev includes a small local instruction-tuned model and does **not** require DEV_MODEL_URL, DEV_MODEL_NAME, or DEV_MODEL_API_KEY to function.
 
-The local engine uses Transformers.js with onnx-community/SmolLM2-135M-Instruct-ONNX-MHA in q4f16 mode. The model is downloaded on first use and cached under /tmp. The first request after a fresh Render start can therefore take noticeably longer.
+The local engine uses Transformers.js with onnx-community/SmolLM2-135M-Instruct-ONNX-MHA in q4f16 mode on CPU. The q4f16 ONNX model file is about 118 MB. Dev lazy-loads it on the first chat, caches it under /tmp, and serializes local generations so concurrent requests do not multiply model memory usage. The first request after a fresh Render start can therefore take noticeably longer.
 
-Standalone mode is the zero-key fallback for normal use. Heavier external models can still be enabled later with:
+Standalone mode is the default zero-key runtime for normal use. The dependency is imported during startup/tests so a missing Transformers.js install fails during deployment instead of only when the first user chats. Heavier external models can still be enabled later with:
 - DEV_MODEL_URL
 - DEV_MODEL_NAME
 - DEV_MODEL_API_KEY

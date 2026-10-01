@@ -249,7 +249,7 @@ async function runLocalAgent(message, workspace) {
 
     try {
       const args = action.action === "git_status" || action.action === "git_diff" ? {} : action;
-      const result = await tool(action.action,args,workspace);
+      const result = await tool(action.action,args,workspace,providerConfig());
       trace.push({tool:action.action,ok:true});
       messages.push({role:"assistant",content:raw});
       messages.push({role:"user",content:"Tool result for " + action.action + ":\\n" + clip(result) + "\\nContinue. Return exactly one JSON object."});

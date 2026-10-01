@@ -20,8 +20,8 @@ async function serveFile(res,file,type){try{const data=await fs.readFile(file);r
 const server=http.createServer(async(req,res)=>{
   try {
     const cfg = providerConfig();
-    if(req.method==="GET" && req.url==="/health") return json(res,200,{ok:true,name:"Dev",version:"0.2.0",engine:cfg.configured?"external":"local",providerConfigured:cfg.configured,localModel:cfg.localModel});
-    if(req.method==="GET" && req.url==="/api/status") return json(res,200,{name:"Dev",version:"0.2.0",codingFocused:true,loginRequired:false,publicChat:true,engine:cfg.configured?"external":"local",providerConfigured:cfg.configured,localModel:cfg.localModel});
+    if(req.method==="GET" && req.url==="/health") return json(res,200,{ok:true,name:"Dev",version:"0.3.0",engine:cfg.configured?"external":"local",providerConfigured:cfg.configured,localModel:cfg.localModel});
+    if(req.method==="GET" && req.url==="/api/status") return json(res,200,{name:"Dev",version:"0.3.0",codingFocused:true,researchEnabled:true,typedDecisions:true,decisionTypes:["choice","score","noul"],loginRequired:false,publicChat:true,engine:cfg.configured?"external":"local",providerConfigured:cfg.configured,localModel:cfg.localModel});
     if(req.method==="POST" && req.url==="/api/key") {
       if(!limiter(req,"key",5)) return json(res,429,{error:"rate_limited"});
       return json(res,201,{name:"DEV_API_KEY",value:encryptToken(),warning:"This secret is shown only in this response. Copy it now."});

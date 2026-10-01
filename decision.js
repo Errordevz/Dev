@@ -1,5 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import dns from "node:dns/promises";
+import net from "node:net";
 
 const MAX_EVIDENCE = 40;
 const MAX_MEMORY = 80;
@@ -249,30 +251,77 @@ function htmlToText(html) {
     .replace(/\\s+/g, " ").trim(), 12000);
 }
 
-export async function fetchResearchUrl(rawUrl) {
-  const value = String(rawUrl || "").trim();
+function isPrivateIp(address) {
+  if (net.isIP(address) === 4) {
+    const parts = address.split(".").map(Number);
+    const [a,b]=parts;
+    return a===10 || a===127 || (a===169 && b===254) || (a===172 && b>=16 && b<=31) ||
+      (a===192 && b===168) || (a===100 && b>=64 && b<=127) || (a===198 && b===18) ||
+      (a===198 && b===19) || (a===0) || (a===192 && b===0) || (a===203 && b===0 && parts[2]===113);
+  }
+  if (net.isIP(address) === 6) {
+    const normalized=address.toLowerCase();
+    return normalized==="::1" || normalized.startsWith("fc") || normalized.startsWith("fd") ||
+      normalized.startsWith("fe8") || normalized.startsWith("fe9") || normalized.startsWith("fea") ||
+      normalized.startsWith("feb") || normalized.startsWith("::ffff:127.") || normalized.startsWith("::ffff:10.") ||
+      normalized.startsWith("::ffff:192.168.") || normalized.startsWith("::ffff:172.16.");
+  }
+  return true;
+}
+
+async function assertPublicHost(value) {
   let parsed;
-  try { parsed = new URL(value); } catch { throw new Error("valid http(s) URL required"); }
+  try { parsed = value instanceof URL ? value : new URL(value); } catch { throw new Error("valid http(s) URL required"); }
   if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("only http(s) URLs are allowed");
   const host = parsed.hostname.toLowerCase();
-  if (["localhost", "127.0.0.1", "0.0.0.0"].includes(host) || host.endsWith(".local")) {
+  if (host.endsWith(".local") || host === "localhost" || host === "metadata.google.internal") {
     throw new Error("local network targets are not allowed");
   }
+  if (net.isIP(host)) {
+    if (isPrivateIp(host)) throw new Error("private or link-local network targets are not allowed");
+    return parsed;
+  }
+  let addresses;
+  try {
+    addresses = await dns.lookup(host, {all:true, verbatim:true});
+  } catch {
+    throw new Error("target hostname could not be resolved");
+  }
+  if (!addresses.length || addresses.some(x => isPrivateIp(x.address))) {
+    throw new Error("target hostname resolves to a private or link-local network");
+  }
+  return parsed;
+}
 
-  const res = await fetch(parsed, {
-    headers: {"user-agent": "Dev-Agent/0.3.0", "accept": "text/html,text/plain,application/json,*/*"},
-    signal: AbortSignal.timeout(12000),
-    redirect: "follow"
-  });
-  const body = await res.text();
-  if (!res.ok) throw new Error("fetch HTTP " + res.status + ": " + clip(body, 1000));
-  const contentType = String(res.headers.get("content-type") || "");
-  return {
-    url: res.url,
-    status: res.status,
-    contentType,
-    text: contentType.includes("html") ? htmlToText(body) : clip(body, 12000)
-  };
+export async function fetchResearchUrl(rawUrl) {
+  let next = await assertPublicHost(String(rawUrl || "").trim());
+
+  for (let hop=0; hop<4; hop++) {
+    const res = await fetch(next, {
+      headers: {"user-agent": "Dev-Agent/0.3.0", "accept": "text/html,text/plain,application/json,*/*"},
+      signal: AbortSignal.timeout(12000),
+      redirect: "manual"
+    });
+
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get("location");
+      if (!location) throw new Error("redirect response had no location");
+      next = await assertPublicHost(new URL(location, next));
+      continue;
+    }
+
+    const body = await res.text();
+    if (!res.ok) throw new Error("fetch HTTP " + res.status + ": " + clip(body, 1000));
+    const contentType = String(res.headers.get("content-type") || "");
+    return {
+      url: res.url || next.toString(),
+      status: res.status,
+      contentType,
+      text: contentType.includes("html") ? htmlToText(body) : clip(body, 12000)
+    };
+  }
+
+  throw new Error("too many redirects");
 }
 
 async function memoryPath(root) {

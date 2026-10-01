@@ -160,7 +160,7 @@ async function providerDecision({type, state, question, options, rungs, cfg}) {
   try { data = JSON.parse(raw); } catch { throw new Error("decision provider returned invalid JSON"); }
   const content = String(data?.choices?.[0]?.message?.content || "").trim();
   const fence = String.fromCharCode(96).repeat(3);
-  const fenced = content.match(new RegExp(fence + "(?:json)?\\s*([\\s\\S]*?)" + fence, "i"));
+  const fenced = content.match(new RegExp(fence + "(?:json)?\s*([\s\\S]*?)" + fence, "i"));
   const source = fenced ? fenced[1].trim() : content;
   let parsed;
   try { parsed = JSON.parse(source); } catch { throw new Error("decision provider returned non-JSON content"); }
@@ -241,14 +241,14 @@ export async function researchGithub(query, kind = "repositories") {
 
 function htmlToText(html) {
   return clip(String(html)
-    .replace(/<script[\\s\\S]*?<\\/script>/gi, " ")
-    .replace(/<style[\\s\\S]*?<\\/style>/gi, " ")
+    .replace(/<script[\s\\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
-    .replace(/\\s+/g, " ").trim(), 12000);
+    .replace(/\s+/g, " ").trim(), 12000);
 }
 
 function isPrivateIp(address) {

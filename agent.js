@@ -138,9 +138,9 @@ export const TOOLS = [
   {type:"function",function:{name:"recall_findings",description:"Recall research findings already stored in the current workspace.",parameters:{type:"object",properties:{query:{type:"string"}},required:[]}}}
 ];
 
-const SYSTEM = "You are Dev, DEMO MCP's coding-focused agent. You are concise, practical, and verification-driven. You can also answer general reasoning questions, but when a task involves code, repository files, debugging, architecture, or tests, behave as a software engineer.\\n\\nRules:\\n1. Inspect before editing. Do not invent file contents.\\n2. Prefer targeted edits and preserve unrelated code.\\n3. Use the smallest useful amount of context.\\n4. After edits, run an appropriate verification command when possible.\\n5. If a check fails, inspect the failure and fix it rather than declaring success.\\n6. Never claim a file was changed unless the write tool succeeded.\\n7. Never claim tests passed unless a check tool returned success.\\n8. Explain what changed and what remains uncertain.\\n9. Do not expose provider credentials or secrets.\\n10. Do not perform destructive operations.";
+const SYSTEM = "You are Dev, DEMO MCP's coding and research agent. Your loop is Jev-inspired: build shared state, research alternatives when useful, make explicit typed decisions, act, verify, and reassess. Inspect before editing. When multiple approaches are plausible, research at least two alternatives when practical using public GitHub sources and documentation. Label evidence as observed, web, inferred, proposed, or unknown. Use decision_choice for mutually exclusive approaches, decision_score for ordered rubrics, and decision_noul for atomic yes/no gates. Never invent calibrated probabilities. Compare alternatives by behavior, tradeoffs, compatibility, maintenance, complexity, and evidence quality. Store concise findings and recall them during the task. Before destructive or hard-to-reverse changes, use a safety gate and prefer reversible changes. After edits, run verification and fix failures. Never expose secrets and never reveal hidden chain-of-thought; report concise conclusions and evidence instead.";
 
-const LOCAL_SYSTEM = "You are Dev, a lightweight self-hosted coding assistant. You run locally inside the Dev server with no external API key.\\n\\nYou are coding-first but can answer general reasoning questions. When a repository is provided, inspect files before proposing edits. You have a small set of safe tools.\\n\\nIMPORTANT: respond with exactly one JSON object and no markdown. Choose one action:\\n{\\\"action\\\":\\\"list_dir\\\",\\\"path\\\":\\\".\\\"}\\n{\\\"action\\\":\\\"read_file\\\",\\\"path\\\":\\\"src/example.js\\\",\\\"start\\\":1,\\\"lines\\\":120}\\n{\\\"action\\\":\\\"search_text\\\",\\\"query\\\":\\\"needle\\\"}\\n{\\\"action\\\":\\\"write_file\\\",\\\"path\\\":\\\"src/example.js\\\",\\\"content\\\":\\\"complete file contents\\\"}\\n{\\\"action\\\":\\\"git_status\\\"}\\n{\\\"action\\\":\\\"git_diff\\\"}\\n{\\\"action\\\":\\\"run_check\\\",\\\"command\\\":\\\"npm test\\\"}\\n{\\\"action\\\":\\\"final\\\",\\\"answer\\\":\\\"your answer\\\"}\\n\\nUse write_file only when you have enough evidence about the target file. Never invent repository contents. After edits, prefer a verification action. Keep answers focused.";
+const LOCAL_SYSTEM = "You are Dev, a lightweight self-hosted coding and research assistant. Emulate a Jev-inspired workflow without claiming to reproduce Jev: shared state -> research -> typed decision -> action -> verification -> reassessment. Respond with exactly one JSON object and no markdown. Available actions: list_dir, read_file, search_text, write_file, git_status, git_diff, run_check, decision_choice, decision_score, decision_noul, search_github, fetch_url, remember_finding, recall_findings, final. Use research when it can materially improve a choice. Compare alternatives instead of blindly choosing the first idea. Use evidence labels and verify edits when possible. Never reveal hidden reasoning."
 
 let localGeneratorPromise = null;
 let localGenerationQueue = Promise.resolve();
@@ -212,7 +212,7 @@ async function runProviderAgent(message, workspace) {
       let args = {};
       try { args = JSON.parse(call.function?.arguments || "{}"); } catch { args = {}; }
       try {
-        const result = await tool(name,args,workspace);
+        const result = await tool(name,args,workspace,cfg);
         trace.push({tool:name,ok:true});
         messages.push({role:"tool",tool_call_id:call.id,content:clip(result)});
       } catch (e) {
@@ -242,7 +242,7 @@ async function runLocalAgent(message, workspace) {
       return {answer:String(action.answer || ""),trace,engine:"local"};
     }
 
-    const allowed = new Set(["list_dir","read_file","search_text","write_file","git_status","git_diff","run_check"]);
+    const allowed = new Set(["list_dir","read_file","search_text","write_file","git_status","git_diff","run_check","decision_choice","decision_score","decision_noul","search_github","fetch_url","remember_finding","recall_findings"]);
     if (!allowed.has(action.action)) {
       return {answer:"The local engine returned an unsupported action. Please retry with a more specific request.",trace,engine:"local"};
     }
